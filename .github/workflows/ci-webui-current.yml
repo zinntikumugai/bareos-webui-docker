@@ -1,0 +1,126 @@
+name: CI WebUI Current Ubuntu
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - 'webui/current-ubuntu/**'
+      - '.github/workflows/ci-webui-current.yml'
+  pull_request:
+    branches:
+      - master
+    paths:
+      - 'webui/current-ubuntu/**'
+      - '.github/workflows/ci-webui-current.yml'
+  workflow_dispatch:
+  schedule:
+    # 週次スケジュール: 日曜日 6:00 UTC
+    - cron: '0 6 * * 0'
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}/bareos-webui
+
+jobs:
+  build:
+    name: Build Docker Image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./webui/current-ubuntu
+          file: ./webui/current-ubuntu/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: false
+          outputs: type=cacheonly
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  test:
+    name: Test Docker Image
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name != 'pull_request'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image for testing
+        uses: docker/build-push-action@v5
+        with:
+          context: ./webui/current-ubuntu
+          file: ./webui/current-ubuntu/Dockerfile
+          platforms: linux/amd64
+          push: false
+          load: true
+          tags: bareos-webui:test
+          cache-from: type=gha
+
+      - name: Test image
+        run: |
+          # 設定ファイルのバックアップが存在するか確認
+          docker run --rm bareos-webui:test test -f /bareos-webui.tgz && echo "Backup file exists" || exit 1
+          # エントリーポイントスクリプトが存在するか確認
+          docker run --rm bareos-webui:test test -f /docker-entrypoint.sh && echo "Entrypoint script exists" || exit 1
+          # エントリーポイントスクリプトが実行可能か確認
+          docker run --rm bareos-webui:test test -x /docker-entrypoint.sh && echo "Entrypoint script is executable" || exit 1
+
+  push:
+    name: Push Docker Image
+    runs-on: ubuntu-latest
+    needs: [build, test]
+    if: github.event_name != 'pull_request'
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=current-ubuntu
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./webui/current-ubuntu
+          file: ./webui/current-ubuntu/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

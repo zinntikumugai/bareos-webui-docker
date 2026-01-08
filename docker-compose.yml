@@ -1,0 +1,24 @@
+version: '3.8'
+
+services:
+  bareos-webui:
+    build:
+      context: ./webui/current-ubuntu
+      dockerfile: Dockerfile
+    image: barcus/bareos-webui:current-ubuntu
+    ports:
+      - 8080:80
+    environment:
+      - BAREOS_DIR_HOST=bareos-dir
+      - SERVER_STATS=yes  # オプション: Apacheサーバーステータスを有効化
+    volumes:
+      - ./data/bareos/config/webui:/etc/bareos-webui
+    depends_on:
+      - bareos-dir
+    restart: unless-stopped
+
+  # Bareos Directorサービス（例）
+  bareos-dir:
+    image: barcus/bareos-director:current-ubuntu
+    # Directorの設定は別途必要
+    # この例ではWebUIとの依存関係を示すため
