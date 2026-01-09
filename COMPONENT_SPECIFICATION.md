@@ -17,6 +17,8 @@ Bareos WebUIは、BareosバックアップシステムのWebベースの管理�
 **主要コンポーネント**:
 - Bareos WebUIパッケージ（`bareos-webui`）
 - Apache HTTP Server
+- PHP 8.3とApache PHPモジュール
+- PHP拡張機能（curl, json, xml, intl, mbstring）
 - 設定ファイルのバックアップ/リストア機能
 
 **ビルドプロセス**:
@@ -35,7 +37,16 @@ RUN apt-get update -qq \
  && curl -fsSL $BAREOS_KEY | gpg --dearmor -o /etc/apt/keyrings/bareos.gpg \
  && echo "deb [signed-by=/etc/apt/keyrings/bareos.gpg] $BAREOS_REPO /" > /etc/apt/sources.list.d/bareos.list \
  && apt-get update -qq \
- && apt-get install -qq -y --no-install-recommends bareos-webui \
+ && apt-get install -qq -y --no-install-recommends \
+    bareos-webui \
+    php \
+    libapache2-mod-php \
+    php-curl \
+    php-json \
+    php-xml \
+    php-intl \
+    php-mbstring \
+ && a2enmod php8.3 \
  && apt-get clean \
  && rm -rf /var/lib/apt/lists/*
 
