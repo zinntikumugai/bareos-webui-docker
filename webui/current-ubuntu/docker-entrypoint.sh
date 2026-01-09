@@ -13,14 +13,12 @@ if [ ! -f /etc/bareos-webui/bareos-config.control ];then
   touch /etc/bareos-webui/bareos-config.control
 fi
 
-# Apache設定ファイルのパス
-apache_conf="/etc/apache2/sites-available/000-default.conf"
-
-# ドキュメントルートの設定
-sed -i "s#/var/www/html#/usr/share/bareos-webui/public#g" $apache_conf
+# Bareos Directorのホストアドレスをデフォルト値に設定（環境変数が未設定の場合）
+: ${BAREOS_DIR_HOST:=bareos-dir}
 
 # Apacheサーバーステータスの有効化（オプション）
 if [ "${SERVER_STATS}" == "yes" ]; then
+  apache_conf="/etc/apache2/sites-available/000-default.conf"
   sed -i 's!#ServerName.*!Alias /server-status /var/www/dummy!' $apache_conf
 fi
 

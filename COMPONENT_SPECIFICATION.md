@@ -46,7 +46,8 @@ RUN apt-get update -qq \
     php-xml \
     php-intl \
     php-mbstring \
- && a2enmod php8.3 \
+ && a2enmod rewrite \
+ && a2enconf bareos-webui \
  && apt-get clean \
  && rm -rf /var/lib/apt/lists/*
 
@@ -68,13 +69,15 @@ CMD ["/usr/sbin/apache2ctl", "-D", "FOREGROUND"]
 - 設定ファイルは `/etc/bareos-webui` に配置
 - 設定ファイルのバックアップは `/bareos-webui.tgz` に保存
 - Apacheのドキュメントルートは `/usr/share/bareos-webui/public`
+- Bareos WebUIのApache設定（`/etc/apache2/conf-available/bareos-webui.conf`）を自動的に有効化
+- Apacheのrewriteモジュールを有効化
 
 ### 1.2 docker-entrypoint.sh 仕様
 
 **スクリプトの役割**:
 1. 初回起動時に設定ファイルを展開
 2. Bareos Directorのホストアドレスを設定
-3. Apache設定の調整
+3. オプション: Apacheサーバーステータスの有効化
 
 **主要処理**:
 ```bash
@@ -93,14 +96,12 @@ if [ ! -f /etc/bareos-webui/bareos-config.control ];then
   touch /etc/bareos-webui/bareos-config.control
 fi
 
-# Apache設定ファイルのパス
-apache_conf="/etc/apache2/sites-available/000-default.conf"
-
-# ドキュメントルートの設定
-sed -i "s#/var/www/html#/usr/share/bareos-webui/public#g" $apache_conf
+# Bareos Directorのホストアドレスをデフォルト値に設定（環境変数が未設定の場合）
+: ${BAREOS_DIR_HOST:=bareos-dir}
 
 # Apacheサーバーステータスの有効化（オプション）
 if [ "${SERVER_STATS}" == "yes" ]; then
+  apache_conf="/etc/apache2/sites-available/000-default.conf"
   sed -i 's!#ServerName.*!Alias /server-status /var/www/dummy!' $apache_conf
 fi
 

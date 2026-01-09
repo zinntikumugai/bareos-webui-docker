@@ -21,7 +21,8 @@ RUN apt-get update -qq \
     php-xml \
     php-intl \
     php-mbstring \
- && a2enmod php8.3 \
+ && a2enmod rewrite \
+ && a2enconf bareos-webui \
  && apt-get clean \
  && rm -rf /var/lib/apt/lists/*
 
