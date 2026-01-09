@@ -8,7 +8,7 @@ Bareos WebUIは、BareosバックアップシステムのWebベースの管理�
 
 ## サポートされているバージョン
 
-- **current-ubuntu**: Ubuntu Noble (24.04) ベース、Apache HTTP Server使用
+- **current-ubuntu**: Ubuntu Noble (24.04) ベース、Apache HTTP Server + PHP-FPM 8.3使用
 
 ## クイックスタート
 

@@ -17,7 +17,7 @@ Bareos WebUIは、BareosバックアップシステムのWebベースの管理�
 **主要コンポーネント**:
 - Bareos WebUIパッケージ（`bareos-webui`）
 - Apache HTTP Server
-- PHP 8.3とApache PHPモジュール
+- PHP-FPM 8.3（Bareos 22以降で必須）
 - PHP拡張機能（curl, json, xml, intl, mbstring）
 - 設定ファイルのバックアップ/リストア機能
 
@@ -39,15 +39,14 @@ RUN apt-get update -qq \
  && apt-get update -qq \
  && apt-get install -qq -y --no-install-recommends \
     bareos-webui \
-    php \
-    libapache2-mod-php \
+    php-fpm \
     php-curl \
     php-json \
     php-xml \
     php-intl \
     php-mbstring \
- && a2enmod rewrite \
- && a2enconf bareos-webui \
+ && a2enmod proxy_fcgi setenvif rewrite \
+ && a2enconf php8.3-fpm bareos-webui \
  && apt-get clean \
  && rm -rf /var/lib/apt/lists/*
 
@@ -61,7 +60,7 @@ RUN tar czf /bareos-webui.tgz /etc/bareos-webui
 EXPOSE 80
 VOLUME /etc/bareos-webui
 ENTRYPOINT ["/docker-entrypoint.sh"]
-CMD ["/usr/sbin/apache2ctl", "-D", "FOREGROUND"]
+CMD ["sh", "-c", "php-fpm8.3 -D && /usr/sbin/apache2ctl -D FOREGROUND"]
 ```
 
 **重要なポイント**:
@@ -70,7 +69,9 @@ CMD ["/usr/sbin/apache2ctl", "-D", "FOREGROUND"]
 - 設定ファイルのバックアップは `/bareos-webui.tgz` に保存
 - Apacheのドキュメントルートは `/usr/share/bareos-webui/public`
 - Bareos WebUIのApache設定（`/etc/apache2/conf-available/bareos-webui.conf`）を自動的に有効化
-- Apacheのrewriteモジュールを有効化
+- **PHP-FPM 8.3を使用**（Bareos 22以降で必須、Apache mod-phpは非推奨）
+- Apacheモジュール: `proxy_fcgi`, `setenvif`, `rewrite`を有効化
+- PHP-FPMとApacheを同時起動
 
 ### 1.2 docker-entrypoint.sh 仕様
 

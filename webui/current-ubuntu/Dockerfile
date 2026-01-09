@@ -14,15 +14,14 @@ RUN apt-get update -qq \
  && apt-get update -qq \
  && apt-get install -qq -y --no-install-recommends \
     bareos-webui \
-    php \
-    libapache2-mod-php \
+    php-fpm \
     php-curl \
     php-json \
     php-xml \
     php-intl \
     php-mbstring \
- && a2enmod rewrite \
- && a2enconf bareos-webui \
+ && a2enmod proxy_fcgi setenvif rewrite \
+ && a2enconf php8.3-fpm bareos-webui \
  && apt-get clean \
  && rm -rf /var/lib/apt/lists/*
 
@@ -36,4 +35,4 @@ RUN tar czf /bareos-webui.tgz /etc/bareos-webui
 EXPOSE 80
 VOLUME /etc/bareos-webui
 ENTRYPOINT ["/docker-entrypoint.sh"]
-CMD ["/usr/sbin/apache2ctl", "-D", "FOREGROUND"]
+CMD ["sh", "-c", "php-fpm8.3 -D && /usr/sbin/apache2ctl -D FOREGROUND"]
