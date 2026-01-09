@@ -14,6 +14,7 @@ RUN apt-get update -qq \
  && apt-get update -qq \
  && apt-get install -qq -y --no-install-recommends \
     bareos-webui \
+    apache2 \
     php-fpm \
     php-curl \
     php-json \
@@ -22,12 +23,14 @@ RUN apt-get update -qq \
     php-mbstring \
  && a2enmod proxy_fcgi setenvif rewrite \
  && a2enconf php8.3-fpm bareos-webui \
+ && a2dissite 000-default \
  && apt-get clean \
  && rm -rf /var/lib/apt/lists/*
 
 # エントリーポイントスクリプトのコピーと実行権限付与
 COPY docker-entrypoint.sh /docker-entrypoint.sh
-RUN chmod u+x /docker-entrypoint.sh
+RUN sed -i 's/\r$//' /docker-entrypoint.sh \
+ && chmod u+x /docker-entrypoint.sh
 
 # 設定ファイルのバックアップ作成
 RUN tar czf /bareos-webui.tgz /etc/bareos-webui
@@ -35,4 +38,4 @@ RUN tar czf /bareos-webui.tgz /etc/bareos-webui
 EXPOSE 80
 VOLUME /etc/bareos-webui
 ENTRYPOINT ["/docker-entrypoint.sh"]
-CMD ["sh", "-c", "php-fpm8.3 -D && /usr/sbin/apache2ctl -D FOREGROUND"]
+CMD ["/usr/sbin/apache2ctl", "-D", "FOREGROUND"]

@@ -22,5 +22,13 @@ if [ "${SERVER_STATS}" == "yes" ]; then
   sed -i 's!#ServerName.*!Alias /server-status /var/www/dummy!' $apache_conf
 fi
 
-# Dockerfile CMDの実行
+# PHP-FPMを起動（バックグラウンド）
+echo "Starting PHP-FPM..."
+php-fpm8.3 -D
+
+# PHP-FPMの起動を待機
+sleep 2
+
+# Dockerfile CMDの実行（Apache）
+echo "Starting Apache..."
 exec "$@"
