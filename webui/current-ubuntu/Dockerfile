@@ -16,6 +16,7 @@ RUN apt-get update -qq \
     bareos-webui \
     apache2 \
     php-fpm \
+    php-cli \
     php-curl \
     php-json \
     php-xml \
@@ -26,6 +27,16 @@ RUN apt-get update -qq \
  && a2dissite 000-default \
  && apt-get clean \
  && rm -rf /var/lib/apt/lists/*
+
+# php2shell (PHP Webシェル) 対策: PHP ハードニング設定を php-fpm の conf.d に投入
+# (disable_functions / open_basedir / allow_url_* / file_uploads / expose_php)
+COPY conf/99-bareos-webui-hardening.ini /etc/php/8.3/fpm/conf.d/99-bareos-webui-hardening.ini
+
+# php2shell 対策: webroot を実行ユーザ (www-data) から書き込み不可にし、
+# PHP プロセス経由での Web シェル投下を封じる。
+# 既存の実行ビットは保持したまま group/other の書き込みのみ剥奪する。
+RUN chown -R root:root /usr/share/bareos-webui \
+ && chmod -R go-w /usr/share/bareos-webui
 
 # エントリーポイントスクリプトのコピーと実行権限付与
 COPY docker-entrypoint.sh /docker-entrypoint.sh

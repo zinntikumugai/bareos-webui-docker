@@ -50,7 +50,6 @@ jobs:
     name: Test Docker Image
     runs-on: ubuntu-latest
     needs: build
-    if: github.event_name != 'pull_request'
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -77,6 +76,9 @@ jobs:
           docker run --rm bareos-webui:test test -f /docker-entrypoint.sh && echo "Entrypoint script exists" || exit 1
           # エントリーポイントスクリプトが実行可能か確認
           docker run --rm bareos-webui:test test -x /docker-entrypoint.sh && echo "Entrypoint script is executable" || exit 1
+
+      - name: Test php2shell hardening
+        run: bash webui/current-ubuntu/tests/test-hardening.sh bareos-webui:test
 
   push:
     name: Push Docker Image

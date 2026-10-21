@@ -68,6 +68,36 @@ docker run -d \
 - **ユーザー名**: `admin`
 - **パスワード**: 環境変数 `BAREOS_WEBUI_PASSWORD` で設定（Directorコンテナで設定）
 
+## セキュリティ（php2shell 対策）
+
+PHP Webシェル（php2shell）攻撃に対する多層防御（defense-in-depth）を適用しています。
+Bareos WebUI は Director と TCP ソケットで通信するだけで、コマンド実行系関数・
+ファイルアップロード・URLインクルードを必要としないため、これらを無効化しても
+アプリ動作には影響しません。
+
+適用内容（`webui/current-ubuntu/conf/99-bareos-webui-hardening.ini` を php-fpm に投入）:
+
+| 項目 | 設定 | 目的 |
+|------|------|------|
+| `disable_functions` | `exec`, `shell_exec`, `system`, `passthru`, `proc_open`, `popen`, `pcntl_exec` ほか | Webシェルの要であるOSコマンド実行/プロセス制御を無効化 |
+| `open_basedir` | アプリ関連パスのみ許可 | PHPがアクセスできるファイルシステム範囲を限定 |
+| `allow_url_fopen` / `allow_url_include` | `Off` | リモートファイルインクルード(RFI)対策 |
+| `file_uploads` | `Off` | 不要なファイルアップロード経路を遮断 |
+| `expose_php` | `Off` | PHPバージョン等の情報漏えいを低減 |
+| webroot 権限 | `www-data` から書き込み不可 | PHPプロセス経由でのWebシェル投下を封じる |
+
+> `open_basedir` は環境によって追加のパスが必要になる場合があります。
+> `open_basedir restriction in effect` エラーが出る場合は、当該 ini に必要なパスを追記してください。
+
+これらの設定は `webui/current-ubuntu/tests/test-hardening.sh` で検証され、CI（test ジョブ）で
+自動的にチェックされます。ローカルでの検証:
+
+```bash
+cd webui/current-ubuntu
+docker build -t bareos-webui:test .
+bash tests/test-hardening.sh bareos-webui:test
+```
+
 ## ビルド方法
 
 ### ローカルビルド
