@@ -22,12 +22,14 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# php-fpm 用 php.ini のディレクティブ値を取得する。
-# conf.d のハードニング drop-in を含めて評価するため SAPI=fpm の設定を参照する。
+# php-fpm 用設定 (php.ini + conf.d の drop-in) を CLI で評価する。
+# PHP CLI は既定で CLI 用 conf.d を読むため、PHP_INI_SCAN_DIR を fpm の
+# conf.d に向けて、ハードニング drop-in を含めた実効値を取得する。
+FPM_PHP="docker run --rm -e PHP_INI_SCAN_DIR=/etc/php/8.3/fpm/conf.d --entrypoint php $IMAGE -c /etc/php/8.3/fpm/php.ini"
+
 php_setting() {
   local name="$1"
-  docker run --rm --entrypoint php "$IMAGE" \
-    -c /etc/php/8.3/fpm/php.ini -r "echo ini_get('$name');"
+  $FPM_PHP -r "echo ini_get('$name');"
 }
 
 echo "== php2shell hardening test for image: $IMAGE =="
@@ -36,8 +38,7 @@ echo "-- 1. disable_functions (コマンド実行系の無効化) --"
 DISABLED="$(php_setting disable_functions || true)"
 echo "     disable_functions = ${DISABLED:-<empty>}"
 for fn in exec passthru shell_exec system proc_open popen pcntl_exec; do
-  if docker run --rm --entrypoint php "$IMAGE" -c /etc/php/8.3/fpm/php.ini \
-       -r "exit(function_exists('$fn') ? 1 : 0);"; then
+  if $FPM_PHP -r "exit(function_exists('$fn') ? 1 : 0);"; then
     pass "$fn is disabled"
   else
     fail "$fn is still callable"

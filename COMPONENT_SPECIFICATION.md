@@ -73,6 +73,30 @@ CMD ["sh", "-c", "php-fpm8.3 -D && /usr/sbin/apache2ctl -D FOREGROUND"]
 - Apacheモジュール: `proxy_fcgi`, `setenvif`, `rewrite`を有効化
 - PHP-FPMとApacheを同時起動
 
+### 1.1.1 セキュリティハードニング（php2shell 対策）
+
+PHP Webシェル攻撃への多層防御として、以下を適用している。
+
+**PHP 設定 drop-in**: `webui/current-ubuntu/conf/99-bareos-webui-hardening.ini`
+（Dockerfile で `/etc/php/8.3/fpm/conf.d/` に `COPY`）
+
+- `disable_functions`: `exec`, `passthru`, `shell_exec`, `system`, `proc_open`, `popen`,
+  `pcntl_exec` などコマンド実行/プロセス制御系関数を無効化
+- `open_basedir`: PHPのファイルアクセスをアプリ関連パス
+  （`/usr/share/bareos-webui/`, `/etc/bareos-webui/`, `/var/lib/bareos-webui/`,
+  `/var/log/bareos/`, `/tmp/`, `/var/lib/php/sessions/`, `/dev/urandom`）に限定
+- `allow_url_fopen` / `allow_url_include`: `Off`（RFI対策）
+- `file_uploads`: `Off`、`enable_dl`: `Off`、`expose_php`: `Off`
+
+**webroot の書き込み禁止**: Dockerfile で `/usr/share/bareos-webui` を `root:root` 所有・
+`755/644` に固め、実行ユーザ `www-data` から書き込めないようにしている。
+
+**検証**: `webui/current-ubuntu/tests/test-hardening.sh`（CI の `test` ジョブから実行）で
+各設定の有効性とログイン画面の描画（`open_basedir restriction` エラー無し）を確認する。
+
+> 注意: php-fpm は `fpm/conf.d` を読み込むため、設定確認を PHP CLI で行う際は
+> `PHP_INI_SCAN_DIR=/etc/php/8.3/fpm/conf.d` を指定する必要がある（テストスクリプトで対応済み）。
+
 ### 1.2 docker-entrypoint.sh 仕様
 
 **スクリプトの役割**:
