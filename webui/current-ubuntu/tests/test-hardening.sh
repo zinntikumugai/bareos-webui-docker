@@ -79,18 +79,21 @@ else
 fi
 
 echo "-- 5. ログイン画面描画 + open_basedir restriction 無し (動作確認) --"
-docker run -d --name "$CONTAINER" -p 18080:80 \
+# ホストポートは Docker に動的割当させ、CI ランナーでのポート衝突を避ける
+docker run -d --name "$CONTAINER" -p 127.0.0.1::80 \
   -e BAREOS_DIR_HOST=bareos-dir "$IMAGE" >/dev/null
+HOST_PORT="$(docker port "$CONTAINER" 80/tcp | head -1 | sed 's/.*://')"
+BASE_URL="http://127.0.0.1:${HOST_PORT}/bareos-webui/"
 
 # Apache / php-fpm の起動待ち
 HTTP_OK=0
 for _ in $(seq 1 30); do
-  CODE="$(curl -s -o /dev/null -w '%{http_code}' http://localhost:18080/bareos-webui/ || true)"
+  CODE="$(curl -s -o /dev/null -w '%{http_code}' "$BASE_URL" || true)"
   if [ "$CODE" = "200" ]; then HTTP_OK=1; break; fi
   sleep 1
 done
 
-BODY="$(curl -s http://localhost:18080/bareos-webui/ || true)"
+BODY="$(curl -s "$BASE_URL" || true)"
 if [ "$HTTP_OK" = "1" ]; then
   pass "login page returned HTTP 200"
 else

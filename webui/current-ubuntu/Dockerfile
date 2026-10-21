@@ -32,10 +32,10 @@ RUN apt-get update -qq \
 COPY conf/99-bareos-webui-hardening.ini /etc/php/8.3/fpm/conf.d/99-bareos-webui-hardening.ini
 
 # php2shell 対策: webroot を実行ユーザ (www-data) から書き込み不可にし、
-# PHP プロセス経由での Web シェル投下を封じる
+# PHP プロセス経由での Web シェル投下を封じる。
+# 既存の実行ビットは保持したまま group/other の書き込みのみ剥奪する。
 RUN chown -R root:root /usr/share/bareos-webui \
- && find /usr/share/bareos-webui -type d -exec chmod 755 {} + \
- && find /usr/share/bareos-webui -type f -exec chmod 644 {} +
+ && chmod -R go-w /usr/share/bareos-webui
 
 # エントリーポイントスクリプトのコピーと実行権限付与
 COPY docker-entrypoint.sh /docker-entrypoint.sh

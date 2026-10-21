@@ -83,8 +83,9 @@ PHP Webシェル攻撃への多層防御として、以下を適用している�
 - `disable_functions`: `exec`, `passthru`, `shell_exec`, `system`, `proc_open`, `popen`,
   `pcntl_exec` などコマンド実行/プロセス制御系関数を無効化
 - `open_basedir`: PHPのファイルアクセスをアプリ関連パス
-  （`/usr/share/bareos-webui/`, `/etc/bareos-webui/`, `/var/lib/bareos-webui/`,
-  `/var/log/bareos/`, `/tmp/`, `/var/lib/php/sessions/`, `/dev/urandom`）に限定
+  （`/usr/share/bareos-webui/`, `/usr/share/php/`, `/etc/bareos-webui/`,
+  `/var/lib/bareos-webui/`, `/var/log/bareos/`, `/tmp/`, `/var/lib/php/sessions/`,
+  `/dev/urandom`）に限定（`/usr/share/php` は PHP の include_path に含まれるため許可）
 - `allow_url_fopen` / `allow_url_include`: `Off`（RFI対策）
 - `file_uploads`: `Off`、`enable_dl`: `Off`、`expose_php`: `Off`
 
