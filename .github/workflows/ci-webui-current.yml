@@ -78,6 +78,9 @@ jobs:
           # エントリーポイントスクリプトが実行可能か確認
           docker run --rm bareos-webui:test test -x /docker-entrypoint.sh && echo "Entrypoint script is executable" || exit 1
 
+      - name: Test php2shell hardening
+        run: bash webui/current-ubuntu/tests/test-hardening.sh bareos-webui:test
+
   push:
     name: Push Docker Image
     runs-on: ubuntu-latest
