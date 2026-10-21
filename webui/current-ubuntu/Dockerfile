@@ -16,6 +16,7 @@ RUN apt-get update -qq \
     bareos-webui \
     apache2 \
     php-fpm \
+    php-cli \
     php-curl \
     php-json \
     php-xml \
