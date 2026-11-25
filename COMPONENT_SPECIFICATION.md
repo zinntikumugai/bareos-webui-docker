@@ -30,29 +30,59 @@ ENV BAREOS_KEY=https://download.bareos.org/current/xUbuntu_24.04/Release.key
 ENV BAREOS_REPO=https://download.bareos.org/current/xUbuntu_24.04/
 ENV DEBIAN_FRONTEND=noninteractive
 
-# GPGキーの追加とリポジトリ設定
-RUN apt-get update -qq \
- && apt-get -qq -y install --no-install-recommends curl tzdata gnupg ca-certificates \
- && install -d /etc/apt/keyrings \
- && curl -fsSL $BAREOS_KEY | gpg --dearmor -o /etc/apt/keyrings/bareos.gpg \
- && echo "deb [signed-by=/etc/apt/keyrings/bareos.gpg] $BAREOS_REPO /" > /etc/apt/sources.list.d/bareos.list \
+# リポジトリ署名鍵 (ASCII armored のまま apt の signed-by に渡す)。
+# curl / gnupg をイメージに入れずに済むよう ADD で取得する。
+ADD --chmod=644 $BAREOS_KEY /etc/apt/keyrings/bareos.asc
+
+# セキュリティパッチ適用のためのキャッシュ無効化キー。
+# CI から日付を渡すことで、apt レイヤがビルドキャッシュで固定化されるのを防ぐ。
+ARG APT_CACHE_BUST=none
+
+# パッケージ導入 + 既存パッケージへのセキュリティアップデート適用
+RUN echo "apt cache bust: ${APT_CACHE_BUST}" \
+ && apt-get update -qq \
+ && apt-get -qq -y upgrade \
+ && apt-get -qq -y install --no-install-recommends tzdata ca-certificates \
+ && echo "deb [signed-by=/etc/apt/keyrings/bareos.asc] $BAREOS_REPO /" > /etc/apt/sources.list.d/bareos.list \
  && apt-get update -qq \
  && apt-get install -qq -y --no-install-recommends \
     bareos-webui \
+    apache2 \
     php-fpm \
+    php-cli \
     php-curl \
     php-json \
     php-xml \
     php-intl \
     php-mbstring \
- && a2enmod proxy_fcgi setenvif rewrite \
+ && a2enmod proxy_fcgi setenvif rewrite headers \
  && a2enconf php8.3-fpm bareos-webui \
+ && a2dissite 000-default \
+ && a2disconf serve-cgi-bin \
  && apt-get clean \
  && rm -rf /var/lib/apt/lists/*
 
+# php2shell (PHP Webシェル) 対策: PHP ハードニング設定を php-fpm の conf.d に投入
+# (disable_functions / open_basedir / allow_url_* / file_uploads / expose_php / session)
+COPY conf/99-bareos-webui-hardening.ini /etc/php/8.3/fpm/conf.d/99-bareos-webui-hardening.ini
+
+# Apache ハードニング: バージョン情報の非表示とセキュリティヘッダ付与
+COPY conf/zz-security-hardening.conf /etc/apache2/conf-available/zz-security-hardening.conf
+RUN sed -i -e 's/^ServerTokens .*/ServerTokens Prod/' \
+           -e 's/^ServerSignature .*/ServerSignature Off/' \
+           /etc/apache2/conf-available/security.conf \
+ && a2enconf zz-security-hardening
+
+# php2shell 対策: webroot を実行ユーザ (www-data) から書き込み不可にし、
+# PHP プロセス経由での Web シェル投下を封じる。
+# 既存の実行ビットは保持したまま group/other の書き込みのみ剥奪する。
+RUN chown -R root:root /usr/share/bareos-webui \
+ && chmod -R go-w /usr/share/bareos-webui
+
 # エントリーポイントスクリプトのコピーと実行権限付与
 COPY docker-entrypoint.sh /docker-entrypoint.sh
-RUN chmod u+x /docker-entrypoint.sh
+RUN sed -i 's/\r$//' /docker-entrypoint.sh \
+ && chmod u+x /docker-entrypoint.sh
 
 # 設定ファイルのバックアップ作成
 RUN tar czf /bareos-webui.tgz /etc/bareos-webui
@@ -60,11 +90,11 @@ RUN tar czf /bareos-webui.tgz /etc/bareos-webui
 EXPOSE 80
 VOLUME /etc/bareos-webui
 ENTRYPOINT ["/docker-entrypoint.sh"]
-CMD ["sh", "-c", "php-fpm8.3 -D && /usr/sbin/apache2ctl -D FOREGROUND"]
+CMD ["/usr/sbin/apache2ctl", "-D", "FOREGROUND"]
 ```
 
 **重要なポイント**:
-- GPGキーは `/etc/apt/keyrings/bareos.gpg` に保存
+- リポジトリ署名鍵は `/etc/apt/keyrings/bareos.asc` に ASCII armored のまま保存（`ADD` で取得し、curl / gnupg は不要）
 - 設定ファイルは `/etc/bareos-webui` に配置
 - 設定ファイルのバックアップは `/bareos-webui.tgz` に保存
 - Apacheのドキュメントルートは `/usr/share/bareos-webui/public`
@@ -103,11 +133,21 @@ PHP Webシェル攻撃への多層防御として、以下を適用している�
 **スクリプトの役割**:
 1. 初回起動時に設定ファイルを展開
 2. Bareos Directorのホストアドレスを設定
-3. オプション: Apacheサーバーステータスの有効化
 
 **主要処理**:
 ```bash
 #!/usr/bin/env bash
+
+# Bareos Directorのホストアドレスをデフォルト値に設定（環境変数が未設定の場合）
+# ※ 設定ファイルへの書き込みより前に確定させる必要がある
+: "${BAREOS_DIR_HOST:=bareos-dir}"
+
+# 入力検証: ホスト名 / IPv4 / IPv6 に使われる文字のみ許可する
+# （sed 置換や ini の引用符を壊す値の混入を防ぐ）
+if [[ ! "${BAREOS_DIR_HOST}" =~ ^[A-Za-z0-9._:-]+$ ]]; then
+  echo "ERROR: invalid BAREOS_DIR_HOST: '${BAREOS_DIR_HOST}'" >&2
+  exit 1
+fi
 
 # 初回起動チェック（制御ファイルの存在確認）
 if [ ! -f /etc/bareos-webui/bareos-config.control ];then
@@ -115,33 +155,34 @@ if [ ! -f /etc/bareos-webui/bareos-config.control ];then
   tar xzf /bareos-webui.tgz --backup=simple --suffix=.before-control
 
   # Bareos Directorのホストアドレスを環境変数から設定
-  sed -i 's#diraddress.*#diraddress = '\""${BAREOS_DIR_HOST}"\"'#' \
+  sed -i 's#diraddress.*#diraddress = "'"${BAREOS_DIR_HOST}"'"#' \
     /etc/bareos-webui/directors.ini
 
   # 制御ファイルの作成（再実行防止）
   touch /etc/bareos-webui/bareos-config.control
 fi
 
-# Bareos Directorのホストアドレスをデフォルト値に設定（環境変数が未設定の場合）
-: ${BAREOS_DIR_HOST:=bareos-dir}
-
-# Apacheサーバーステータスの有効化（オプション）
-if [ "${SERVER_STATS}" == "yes" ]; then
-  apache_conf="/etc/apache2/sites-available/000-default.conf"
-  sed -i 's!#ServerName.*!Alias /server-status /var/www/dummy!' $apache_conf
+# PHP-FPMを起動（バックグラウンド）
+echo "Starting PHP-FPM..."
+if ! php-fpm8.3 -D; then
+  # FPM が起動できないと全 PHP リクエストが失敗するため、Apache を起動せず異常終了する
+  echo "ERROR: failed to start PHP-FPM" >&2
+  exit 1
 fi
 
-# Dockerfile CMDの実行
+# PHP-FPMの起動を待機
+sleep 2
+
+# Dockerfile CMDの実行（Apache）
+echo "Starting Apache..."
 exec "$@"
 ```
 
 **環境変数**:
-- `BAREOS_DIR_HOST`: Bareos Directorのホスト名（必須）
-- `SERVER_STATS`: Apacheサーバーステータスの有効化（オプション、`yes`で有効）
+- `BAREOS_DIR_HOST`: Bareos Directorのホスト名（任意、既定値 `bareos-dir`。英数字と `.` `_` `:` `-` 以外を含む場合は起動失敗）
 
 **設定ファイル**:
 - `/etc/bareos-webui/directors.ini`: Director接続設定
-- `/etc/apache2/sites-available/000-default.conf`: Apache仮想ホスト設定
 
 ### 1.3 docker-compose 設定例
 
@@ -152,7 +193,6 @@ bareos-webui:
     - 8080:80
   environment:
     - BAREOS_DIR_HOST=bareos-dir
-    - SERVER_STATS=yes  # オプション: Apacheサーバーステータスを有効化
   volumes:
     - /data/bareos/config/webui:/etc/bareos-webui
   depends_on:
