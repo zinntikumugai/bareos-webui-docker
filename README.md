@@ -24,7 +24,6 @@ services:
       - 8080:80
     environment:
       - BAREOS_DIR_HOST=bareos-dir
-      - SERVER_STATS=yes  # オプション
     volumes:
       - ./data/bareos/config/webui:/etc/bareos-webui
     depends_on:
@@ -38,7 +37,6 @@ docker run -d \
   --name bareos-webui \
   -p 8080:80 \
   -e BAREOS_DIR_HOST=bareos-dir \
-  -e SERVER_STATS=yes \
   -v ./data/bareos/config/webui:/etc/bareos-webui \
   barcus/bareos-webui:current-ubuntu
 ```
@@ -47,8 +45,7 @@ docker run -d \
 
 | 変数名 | 説明 | 必須 | デフォルト値 |
 |--------|------|------|--------------|
-| `BAREOS_DIR_HOST` | Bareos Directorのホスト名 | はい | - |
-| `SERVER_STATS` | Apacheサーバーステータスの有効化 | いいえ | - |
+| `BAREOS_DIR_HOST` | Bareos Directorのホスト名（英数字と `.` `_` `:` `-` のみ。初回起動時のみ反映） | いいえ | `bareos-dir` |
 
 ## ボリューム
 

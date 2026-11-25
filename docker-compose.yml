@@ -10,7 +10,6 @@ services:
       - 8080:80
     environment:
       - BAREOS_DIR_HOST=bareos-dir
-      - SERVER_STATS=yes  # オプション: Apacheサーバーステータスを有効化
     volumes:
       - ./data/bareos/config/webui:/etc/bareos-webui
     depends_on:

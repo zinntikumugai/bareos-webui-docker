@@ -5,12 +5,20 @@ ENV BAREOS_KEY=https://download.bareos.org/current/xUbuntu_24.04/Release.key
 ENV BAREOS_REPO=https://download.bareos.org/current/xUbuntu_24.04/
 ENV DEBIAN_FRONTEND=noninteractive
 
-# GPGキーの追加とリポジトリ設定
-RUN apt-get update -qq \
- && apt-get -qq -y install --no-install-recommends curl tzdata gnupg ca-certificates \
- && install -d /etc/apt/keyrings \
- && curl -fsSL $BAREOS_KEY | gpg --dearmor -o /etc/apt/keyrings/bareos.gpg \
- && echo "deb [signed-by=/etc/apt/keyrings/bareos.gpg] $BAREOS_REPO /" > /etc/apt/sources.list.d/bareos.list \
+# リポジトリ署名鍵 (ASCII armored のまま apt の signed-by に渡す)。
+# curl / gnupg をイメージに入れずに済むよう ADD で取得する。
+ADD --chmod=644 $BAREOS_KEY /etc/apt/keyrings/bareos.asc
+
+# セキュリティパッチ適用のためのキャッシュ無効化キー。
+# CI から日付を渡すことで、apt レイヤがビルドキャッシュで固定化されるのを防ぐ。
+ARG APT_CACHE_BUST=none
+
+# パッケージ導入 + 既存パッケージへのセキュリティアップデート適用
+RUN echo "apt cache bust: ${APT_CACHE_BUST}" \
+ && apt-get update -qq \
+ && apt-get -qq -y upgrade \
+ && apt-get -qq -y install --no-install-recommends tzdata ca-certificates \
+ && echo "deb [signed-by=/etc/apt/keyrings/bareos.asc] $BAREOS_REPO /" > /etc/apt/sources.list.d/bareos.list \
  && apt-get update -qq \
  && apt-get install -qq -y --no-install-recommends \
     bareos-webui \
@@ -22,15 +30,23 @@ RUN apt-get update -qq \
     php-xml \
     php-intl \
     php-mbstring \
- && a2enmod proxy_fcgi setenvif rewrite \
+ && a2enmod proxy_fcgi setenvif rewrite headers \
  && a2enconf php8.3-fpm bareos-webui \
  && a2dissite 000-default \
+ && a2disconf serve-cgi-bin \
  && apt-get clean \
  && rm -rf /var/lib/apt/lists/*
 
 # php2shell (PHP Webシェル) 対策: PHP ハードニング設定を php-fpm の conf.d に投入
-# (disable_functions / open_basedir / allow_url_* / file_uploads / expose_php)
+# (disable_functions / open_basedir / allow_url_* / file_uploads / expose_php / session)
 COPY conf/99-bareos-webui-hardening.ini /etc/php/8.3/fpm/conf.d/99-bareos-webui-hardening.ini
+
+# Apache ハードニング: バージョン情報の非表示とセキュリティヘッダ付与
+COPY conf/zz-security-hardening.conf /etc/apache2/conf-available/zz-security-hardening.conf
+RUN sed -i -e 's/^ServerTokens .*/ServerTokens Prod/' \
+           -e 's/^ServerSignature .*/ServerSignature Off/' \
+           /etc/apache2/conf-available/security.conf \
+ && a2enconf zz-security-hardening
 
 # php2shell 対策: webroot を実行ユーザ (www-data) から書き込み不可にし、
 # PHP プロセス経由での Web シェル投下を封じる。
