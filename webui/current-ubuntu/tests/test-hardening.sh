@@ -125,9 +125,14 @@ for bin in curl gpg; do
 done
 
 echo "-- 3e. 未適用のセキュリティアップデートが無い --"
+# apt-get update の失敗 (ネットワーク障害等) を「更新なし」と誤判定しないよう、
+# インデックス取得の成否を終了コードで区別する (失敗時は exit 2)
+APT_RC=0
 PENDING="$(docker run --rm --entrypoint sh "$IMAGE" -c \
-  'apt-get update -qq >/dev/null 2>&1 && apt list --upgradable 2>/dev/null | grep -- "-security" || true')"
-if [ -z "$PENDING" ]; then
+  'apt-get update -qq >/dev/null 2>&1 || exit 2; apt list --upgradable 2>/dev/null | grep -- "-security"; exit 0')" || APT_RC=$?
+if [ "$APT_RC" -ne 0 ]; then
+  fail "could not refresh package index (apt-get update failed, rc=$APT_RC)"
+elif [ -z "$PENDING" ]; then
   pass "no pending security updates"
 else
   fail "pending security updates found:"
@@ -151,6 +156,14 @@ if docker run --rm -e 'BAREOS_DIR_HOST=bad"#host' "$IMAGE" true >/dev/null 2>&1;
   fail "invalid BAREOS_DIR_HOST was accepted"
 else
   pass "invalid BAREOS_DIR_HOST is rejected"
+fi
+
+echo "-- 3g. entrypoint: PHP-FPM 起動失敗時は起動中止 --"
+# /run/php を読み取り専用にしてソケット作成を失敗させる
+if docker run --rm --tmpfs /run/php:ro "$IMAGE" true >/dev/null 2>&1; then
+  fail "container continued although php-fpm failed to start"
+else
+  pass "container aborts when php-fpm fails to start"
 fi
 
 echo "-- 4. webroot が www-data から書き込み不可 --"
