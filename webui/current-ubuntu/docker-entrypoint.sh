@@ -26,7 +26,11 @@ fi
 
 # PHP-FPMを起動（バックグラウンド）
 echo "Starting PHP-FPM..."
-php-fpm8.3 -D
+if ! php-fpm8.3 -D; then
+  # FPM が起動できないと全 PHP リクエストが失敗するため、Apache を起動せず異常終了する
+  echo "ERROR: failed to start PHP-FPM" >&2
+  exit 1
+fi
 
 # PHP-FPMの起動を待機
 sleep 2

@@ -94,7 +94,7 @@ CMD ["/usr/sbin/apache2ctl", "-D", "FOREGROUND"]
 ```
 
 **重要なポイント**:
-- GPGキーは `/etc/apt/keyrings/bareos.gpg` に保存
+- リポジトリ署名鍵は `/etc/apt/keyrings/bareos.asc` に ASCII armored のまま保存（`ADD` で取得し、curl / gnupg は不要）
 - 設定ファイルは `/etc/bareos-webui` に配置
 - 設定ファイルのバックアップは `/bareos-webui.tgz` に保存
 - Apacheのドキュメントルートは `/usr/share/bareos-webui/public`
@@ -164,7 +164,11 @@ fi
 
 # PHP-FPMを起動（バックグラウンド）
 echo "Starting PHP-FPM..."
-php-fpm8.3 -D
+if ! php-fpm8.3 -D; then
+  # FPM が起動できないと全 PHP リクエストが失敗するため、Apache を起動せず異常終了する
+  echo "ERROR: failed to start PHP-FPM" >&2
+  exit 1
+fi
 
 # PHP-FPMの起動を待機
 sleep 2
